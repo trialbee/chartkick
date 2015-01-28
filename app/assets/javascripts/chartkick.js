@@ -324,7 +324,7 @@
               data[j][0] = data[j][0].getTime();
             }
           }
-          series[i].marker = {symbol: "circle"};
+          series[i].marker = {symbol: "circle", enabled: false};
         }
         options.series = series;
         new Highcharts.Chart(options);
