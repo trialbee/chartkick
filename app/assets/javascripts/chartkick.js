@@ -1,8 +1,9 @@
 /*
  * Chartkick.js
  * Create beautiful Javascript charts with minimal code
- * https://github.com/ankane/chartkick.js
- * v1.3.0
+ * Original: https://github.com/ankane/chartkick.js
+ * Fork: https://github.com/buren/chartkick.js
+ * v1.5.0-buren
  * MIT License
  */
 
@@ -11,7 +12,15 @@
 (function (window) {
   'use strict';
 
-  var config = window.Chartkick || {};
+  var DEFAULT_OPTIONS = {
+    lineChart: {
+      marker: {
+        maxPoints: Infinity
+      }
+    }
+  };
+
+  var config = merge(DEFAULT_OPTIONS, window.Chartkick || {});
   var Chartkick, ISO8601_PATTERN, DECIMAL_SEPARATOR, adapters = [];
 
   // helpers
@@ -29,7 +38,7 @@
   }
 
   function isRemoteUrl(dataSource) {
-    return typeof dataSource === 'string';
+    return typeof dataSource === "string";
   }
 
   // https://github.com/madrobby/zepto/blob/master/src/zepto.js
@@ -105,7 +114,7 @@
     return false;
   }
 
-  function jsOptionsFunc(defaultOptions, hideLegend, setMin, setMax, setStacked) {
+  function jsOptionsFunc(defaultOptions, hideLegend, setMin, setMax, setStacked, setHAxisTitle, setVAxisTitle) {
     return function (series, opts, chartOptions) {
       var options = merge({}, defaultOptions);
       options = merge(options, chartOptions || {});
@@ -134,6 +143,18 @@
 
       if (opts.colors) {
         options.colors = opts.colors;
+      }
+
+      if (opts.dateFormat) {
+        options.dateFormat = opts.dateFormat;
+      }
+
+      if (opts.hAxisTitle) {
+        setHAxisTitle(options, opts.hAxisTitle);
+      }
+
+      if (opts.vAxisTitle) {
+        setVAxisTitle(options, opts.vAxisTitle);
       }
 
       // merge library last
@@ -294,7 +315,15 @@
         options.plotOptions.series.stacking = "normal";
       };
 
-      var jsOptions = jsOptionsFunc(defaultOptions, hideLegend, setMin, setMax, setStacked);
+      var setHAxisTitle = function (options, title) {
+        options.xAxis = {title: {text: title}};
+      };
+
+      var setVAxisTitle = function (options, title) {
+        options.yAxis = {title: {text: title}}
+      };
+
+      var jsOptions = jsOptionsFunc(defaultOptions, hideLegend, setMin, setMax, setStacked, setHAxisTitle, setVAxisTitle);
 
       this.renderLineChart = function (chart, chartType) {
         chartType = chartType || "spline";
@@ -319,6 +348,7 @@
         options.chart.renderTo = chart.element.id;
 
         var series = chart.data;
+        var maxMarkerPoints;
         for (i = 0; i < series.length; i++) {
           data = series[i].data;
           if (!chart.options.discrete) {
@@ -326,9 +356,28 @@
               data[j][0] = data[j][0].getTime();
             }
           }
-          series[i].marker = {symbol: "circle", enabled: false};
+          maxMarkerPoints = series[i].maxMarkerPoints || chart.options.maxMarkerPoints || config.lineChart.marker.maxPoints;
+          series[i].marker = {
+            symbol: series[i].marker || "circle",
+            enabled: maxMarkerPoints >= data.length // Don't display markers if there are too many data points
+          };
         }
         options.series = series;
+        if (options.dateFormat) {
+          options.xAxis.labels.formatter = function (){
+            return Highcharts.dateFormat(options.dateFormat, this.value);
+          };
+        }
+        new Highcharts.Chart(options);
+      };
+
+      this.renderScatterChart = function (chart) {
+        var chartOptions = {};
+        var options = jsOptions(chart.data, chart.options, chartOptions);
+        options.chart.type = 'scatter';
+        options.chart.renderTo = chart.element.id;
+        var data = chart.data;
+        options.series = chart.data;
         new Highcharts.Chart(options);
       };
 
@@ -391,6 +440,52 @@
         new Highcharts.Chart(options);
       };
 
+      this.renderComboChart = function (chart, chartType) {
+        var chartType = chartType || "column";
+        var series = chart.data;
+        var types = chart.options.types;
+        var options = jsOptions(series, chart.options), i, j, s, d, rows = [];
+        // options.chart.type = chartType;
+        options.chart.renderTo = chart.element.id;
+
+        for (i = 0; i < series.length; i++) {
+          s = series[i];
+
+          for (j = 0; j < s.data.length; j++) {
+            d = s.data[j];
+            if (!rows[d[0]]) {
+              rows[d[0]] = new Array(series.length);
+            }
+            rows[d[0]][i] = d[1];
+          }
+        }
+
+        var categories = [];
+        for (i in rows) {
+          if (rows.hasOwnProperty(i)) {
+            categories.push(i);
+          }
+        }
+        options.xAxis.categories = categories;
+
+        var newSeries = [];
+        for (i = 0; i < series.length; i++) {
+          d = [];
+          for (j = 0; j < categories.length; j++) {
+            d.push(rows[categories[j]][i] || 0);
+          }
+
+          newSeries.push({
+            name: series[i].name,
+            data: d,
+            type: types[i]
+          });
+        }
+        options.series = newSeries;
+
+        new Highcharts.Chart(options);
+      };
+
       var self = this;
 
       this.renderBarChart = function (chart) {
@@ -416,7 +511,7 @@
         var cb, call;
         for (var i = 0; i < callbacks.length; i++) {
           cb = callbacks[i];
-          call = google.visualization && ((cb.pack == "corechart" && google.visualization.LineChart) || (cb.pack == "timeline" && google.visualization.Timeline))
+          call = google.visualization && ((cb.pack == "corechart" && google.visualization.LineChart) || (cb.pack == "timeline" && google.visualization.Timeline));
           if (call) {
             cb.callback();
             callbacks.splice(i, 1);
@@ -515,7 +610,15 @@
         options.isStacked = true;
       };
 
-      var jsOptions = jsOptionsFunc(defaultOptions, hideLegend, setMin, setMax, setStacked);
+      var setHAxisTitle = function (options, title) {
+        options.hAxis = {title: title};
+      }
+
+      var setVAxisTitle = function (options, title) {
+        options.vAxis = {title: title};
+      };
+
+      var jsOptions = jsOptionsFunc(defaultOptions, hideLegend, setMin, setMax, setStacked, setHAxisTitle, setVAxisTitle);
 
       // cant use object as key
       var createDataTable = function (series, columnType) {
@@ -538,9 +641,17 @@
         }
 
         var rows2 = [];
+        var value;
         for (i in rows) {
           if (rows.hasOwnProperty(i)) {
-            rows2.push([(columnType === "datetime") ? new Date(toFloat(i)) : i].concat(rows[i]));
+            if (columnType === "datetime") {
+              value = new Date(toFloat(i));
+            } else if (columnType == "number") {
+              value = toFloat(i);
+            } else {
+              value = i;
+            }
+            rows2.push([value].concat(rows[i]));
           }
         }
         if (columnType === "datetime") {
@@ -564,6 +675,21 @@
         waitForLoaded(function () {
           var options = jsOptions(chart.data, chart.options);
           var data = createDataTable(chart.data, chart.options.discrete ? "string" : "datetime");
+          // Date formatting wont work if chart discrete options set to true
+          if (options.dateFormat) {
+            var formatter = new google.visualization.DateFormat({
+              pattern: options.dateFormat
+            });
+            formatter.format(data, 0);
+            options.hAxis.format = options.dateFormat;
+          }
+          var maxMarkerPoints = chart.options.maxMarkerPoints || config.lineChart.marker.maxPoints;
+          // Don't display markers if there are too many data points
+          var enabled = maxMarkerPoints >= data.getNumberOfRows();
+          if (!enabled) {
+            options.pointSize = 0;
+          }
+
           chart.chart = new google.visualization.LineChart(chart.element);
           resize(function () {
             chart.chart.draw(data, options);
@@ -601,6 +727,30 @@
           var options = jsOptions(chart.data, chart.options);
           var data = createDataTable(chart.data, "string");
           chart.chart = new google.visualization.ColumnChart(chart.element);
+          resize(function () {
+            chart.chart.draw(data, options);
+          });
+        });
+      };
+
+      this.renderComboChart = function (chart) {
+        waitForLoaded(function () {
+          var i, type, seriesOptions = [];
+          var types = chart.options.types;
+
+          for (i = 0; i < types.length; i++) {
+            type = types[i];
+            if(type == "column"){
+              type = "bars";
+            }
+            seriesOptions.push({type: type});
+          }
+          var chartOptions = {
+            series: seriesOptions
+          };
+          var options = jsOptionsFunc(defaultOptions, hideLegend, setBarMin, setBarMax, setStacked)(chart.data, chart.options, chartOptions);
+          var data = createDataTable(chart.data, "string");
+          chart.chart = new google.visualization.ComboChart(chart.element);
           resize(function () {
             chart.chart.draw(data, options);
           });
@@ -663,6 +813,19 @@
         });
       };
 
+      this.renderScatterChart = function (chart) {
+        waitForLoaded(function () {
+          var chartOptions = {};
+          var options = jsOptions(chart.data, chart.options, chartOptions);
+          var data = createDataTable(chart.data, chart.options.discrete ? "number" : "datetime");
+
+          chart.chart = new google.visualization.ScatterChart(chart.element);
+          resize(function () {
+            chart.chart.draw(data, options);
+          });
+        });
+      };
+
       this.renderTimeline = function (chart) {
         waitForLoaded("timeline", function () {
           var chartOptions = {
@@ -670,7 +833,7 @@
           };
 
           if (chart.options.colors) {
-            chartOptions.colorAxis.colors = chart.options.colors;
+            chartOptions.colors = chart.options.colors;
           }
           var options = merge(merge(defaultOptions, chartOptions), chart.options.library || {});
 
@@ -711,7 +874,7 @@
   // process data
 
   function processSeries(series, opts, time) {
-    var i, j, data, r, key;
+    var i, j, data, r, key, val, raw;
 
     // see if one series or multiple
     if (!isArray(series) || typeof series[0] !== "object" || isArray(series[0])) {
@@ -723,6 +886,11 @@
     if (opts.discrete) {
       time = false;
     }
+    if (opts.raw) {
+      raw = true;
+      time = false;
+      opts.discrete = true; // Avoid date conversion
+    }
 
     // right format
     for (i = 0; i < series.length; i++) {
@@ -730,8 +898,12 @@
       r = [];
       for (j = 0; j < data.length; j++) {
         key = data[j][0];
-        key = time ? toDate(key) : toStr(key);
-        r.push([key, toFloat(data[j][1])]);
+        val = data[j][1];
+        if (!raw) {
+          key = time ? toDate(key) : toStr(key);
+          val = toFloat(val);
+        }
+        r.push([key, val]);
       }
       if (time) {
         r.sort(sortByTime);
@@ -770,6 +942,11 @@
     renderChart("ColumnChart", chart);
   }
 
+  function processComboData(chart) {
+    chart.data = processSeries(chart.data, chart.options, false);
+    renderChart("ComboChart", chart);
+  }
+
   function processPieData(chart) {
     chart.data = processSimple(chart.data);
     renderChart("PieChart", chart);
@@ -788,6 +965,11 @@
   function processGeoData(chart) {
     chart.data = processSimple(chart.data);
     renderChart("GeoChart", chart);
+  }
+
+  function processScatterData(chart) {
+    chart.data = processSeries(chart.data, chart.options, true);
+    renderChart("ScatterChart", chart);
   }
 
   function processTimelineData(chart) {
@@ -821,44 +1003,65 @@
     BarChart: function (element, dataSource, opts) {
       setElement(this, element, dataSource, opts, processBarData);
     },
+    ComboChart: function (element, dataSource, opts) {
+      setElement(this, element, dataSource, opts, processComboData);
+    },
     AreaChart: function (element, dataSource, opts) {
       setElement(this, element, dataSource, opts, processAreaData);
     },
     GeoChart: function (element, dataSource, opts) {
       setElement(this, element, dataSource, opts, processGeoData);
     },
+    ScatterChart: function (element, dataSource, opts) {
+      setElement(this, element, dataSource, opts, processScatterData);
+    },
     Timeline: function (element, dataSource, opts) {
       setElement(this, element, dataSource, opts, processTimelineData);
     },
     charts: {},
-    updateChart: function(chartId, dataSource) {
+    updateChart: function(chartId, dataSource, opts) {
       var chart = Chartkick.charts[chartId];
-      if (dataSource === undefined && !isRemoteUrl(chart.dataSource)) {
-        return null;
+      var options;
+      var source;
+      if (chart === undefined) {
+        throw new Error("No chart found with id: " + chartId);
       }
-      if (dataSource === undefined) {
-        dataSource = chart.dataSource;
-      }
-      new chart.__proto__.constructor(chart.element.id, dataSource);
+
+      source = dataSource || chart.dataSource;
+      options = opts ? merge(chart.options, opts) : chart.options;
+
+      new chart.__proto__.constructor(chart.element.id, source, options);
     },
-    updateAllCharts: function(dataSourceCallback) {
-      var chartNum   = 1,
-          chartId    = "chart-" + chartNum,
-          chart      = Chartkick.charts[chartId],
-          dataSource = null;
-      while (chart !== undefined) {
-        if (isFunction(dataSourceCallback)) {
-          dataSource = dataSourceCallback(chart);
-        } else if (isRemoteUrl(chart.dataSource)) {
-          dataSource = chart.dataSource;
-        } else {
-          throw new Error("You must pass a function, since the current dataSource is not an URL");
+    updateAllCharts: function(callback) {
+      var charts = Chartkick.charts;
+      var chart;
+      var isRemote;
+      var chartProps;
+
+      var setChartProps = function(obj) {
+        var data = obj.data;
+        var opts = obj.options || {};
+
+        // If there is no data and options properties assume that obj is the data
+        if (!data && !opts) {
+          data = obj;
         }
 
-        Chartkick.updateChart(chartId, dataSource);
-        chartNum++;
-        chartId = "chart-" + chartNum;
-        chart   = Chartkick.charts[chartId];
+        return {
+          options: opts,
+          data: data
+        };
+      }
+
+      for (var chartId in charts) {
+        chart = charts[chartId];
+        isRemote = isRemoteUrl(chart.dataSource);
+        if (isFunction(callback)) {
+          chartProps = setChartProps(callback(chart, isRemote));
+          Chartkick.updateChart(chartId, chartProps.data, chartProps.options);
+        } else if (isRemote) {
+          Chartkick.updateChart(chartId, chart.dataSource);
+        }
       }
     }
   };
