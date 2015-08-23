@@ -3,7 +3,6 @@ require "erb"
 
 module Chartkick
   module Helper
-
     def line_chart(data_source, options = {})
       chartkick_chart "LineChart", data_source, options
     end
@@ -24,8 +23,16 @@ module Chartkick
       chartkick_chart "AreaChart", data_source, options
     end
 
+    def combo_chart(data_source, options = {})
+      chartkick_chart "ComboChart", data_source, options
+    end
+
     def geo_chart(data_source, options = {})
       chartkick_chart "GeoChart", data_source, options
+    end
+
+    def scatter_chart(data_source, options = {})
+      chartkick_chart "ScatterChart", data_source, options
     end
 
     def timeline(data_source, options = {})
@@ -34,15 +41,15 @@ module Chartkick
 
     private
 
-    def chartkick_chart(klass, data_source, options, &block)
+    def chartkick_chart(klass, data_source, options)
       @chartkick_chart_id ||= 0
       options = chartkick_deep_merge(Chartkick.options, options)
       element_id = options.delete(:id) || "chart-#{@chartkick_chart_id += 1}"
       height = options.delete(:height) || "300px"
       # content_for: nil must override default
-      content_for = options.has_key?(:content_for) ? options.delete(:content_for) : Chartkick.content_for
+      content_for = options.key?(:content_for) ? options.delete(:content_for) : Chartkick.content_for
 
-      html = (options.delete(:html) || %[<div id="%{id}" style="height: %{height}; text-align: center; color: #999; line-height: %{height}; font-size: 14px; font-family: 'Lucida Grande', 'Lucida Sans Unicode', Verdana, Arial, Helvetica, sans-serif;">Loading...</div>]) % {id: ERB::Util.html_escape(element_id), height: ERB::Util.html_escape(height)}
+      html = (options.delete(:html) || %(<div id="%{id}" style="height: %{height}; text-align: center; color: #999; line-height: %{height}; font-size: 14px; font-family: 'Lucida Grande', 'Lucida Sans Unicode', Verdana, Arial, Helvetica, sans-serif;">Loading...</div>)) % {id: ERB::Util.html_escape(element_id), height: ERB::Util.html_escape(height)}
 
       js = <<JS
 <script type="text/javascript">
@@ -61,12 +68,11 @@ JS
     # https://github.com/rails/rails/blob/master/activesupport/lib/active_support/core_ext/hash/deep_merge.rb
     def chartkick_deep_merge(hash_a, hash_b)
       hash_a = hash_a.dup
-      hash_b.each_pair do |k,v|
+      hash_b.each_pair do |k, v|
         tv = hash_a[k]
         hash_a[k] = tv.is_a?(Hash) && v.is_a?(Hash) ? tv.deep_merge(v) : v
       end
       hash_a
     end
-
   end
 end
