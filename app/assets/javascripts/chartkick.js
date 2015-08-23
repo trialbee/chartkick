@@ -3,7 +3,7 @@
  * Create beautiful Javascript charts with minimal code
  * Original: https://github.com/ankane/chartkick.js
  * Fork: https://github.com/buren/chartkick.js
- * v1.5.0-buren
+ * v1.4.0-buren
  * MIT License
  */
 
@@ -137,23 +137,23 @@
         setMax(options, opts.max);
       }
 
-      if (opts.stacked) {
+      if ("stacked" in opts) {
         setStacked(options);
       }
 
-      if (opts.colors) {
+      if ("colors" in opts) {
         options.colors = opts.colors;
       }
 
-      if (opts.dateFormat) {
+      if ("dateFormat" in opts) {
         options.dateFormat = opts.dateFormat;
       }
 
-      if (opts.hAxisTitle) {
+      if ("hAxisTitle" in opts) {
         setHAxisTitle(options, opts.hAxisTitle);
       }
 
-      if (opts.vAxisTitle) {
+      if ("vAxisTitle" in opts) {
         setVAxisTitle(options, opts.vAxisTitle);
       }
 
@@ -977,6 +977,14 @@
     renderChart("Timeline", chart);
   }
 
+  function Repeater(callback, timeout) {
+    var self = this;
+    var update = callback;
+
+    self.runner = setInterval(function () { update(); }, timeout);
+    self.stop = function () { clearInterval(self.runner); };
+  };
+
   function setElement(chart, element, dataSource, opts, callback) {
     if (typeof element === "string") {
       element = document.getElementById(element);
@@ -986,6 +994,8 @@
     chart.dataSource = dataSource;
     Chartkick.charts[element.id] = chart;
     fetchDataSource(chart, callback);
+
+    Chartkick.setRefresh(element.id, chart.options.refresh);
   }
 
   // define classes
@@ -1017,6 +1027,18 @@
     },
     Timeline: function (element, dataSource, opts) {
       setElement(this, element, dataSource, opts, processTimelineData);
+    },
+    repeaters: {},
+    setRefresh: function(chartId, refreshInterval) {
+      if (refreshInterval && !Chartkick.repeaters[chartId]) {
+        Chartkick.repeaters[chartId] = new Repeater(function() {
+          Chartkick.updateChart(chartId);
+        }, refreshInterval);
+      }
+    },
+    stopRefresh: function(chartId) {
+      Chartkick.repeaters[chartId].stop();
+      Chartkick.repeaters[chartId] = null;
     },
     charts: {},
     updateChart: function(chartId, dataSource, opts) {
